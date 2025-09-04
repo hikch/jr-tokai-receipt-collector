@@ -366,15 +366,30 @@ on saveReceiptAsPDF(fileName, saveDir)
         keystroke return
         delay 2
         
-        -- 既存ファイル置き換え確認ダイアログが出た場合
-        try
-          if exists button "置き換える" of sheet 1 of window 1 then
-            click button "置き換える" of sheet 1 of window 1
-            delay 1
-          end if
-        on error
-          -- 置き換え確認なし、正常
-        end try
+        -- 既存ファイル置き換え確認ダイアログが出た場合（待機ループで対応）
+        set replaced to false
+        repeat with i from 1 to 10 -- 最大5秒待機 (10 * 0.5s)
+          try
+            -- 診断ログから判明した正確な階層を指定
+            if exists button "置き換え" of sheet 1 of sheet 1 of window 1 then
+              click button "置き換え" of sheet 1 of sheet 1 of window 1
+              set replaced to true
+              delay 1
+              exit repeat
+            end if
+          on error errMsg
+            -- 念のためのフォールバック
+            try
+              if exists button "置き換え" of window 1 then
+                click button "置き換え" of window 1
+                set replaced to true
+                delay 1
+                exit repeat
+              end if
+            end try
+          end try
+          delay 0.5
+        end repeat
         
       end tell
     end tell
