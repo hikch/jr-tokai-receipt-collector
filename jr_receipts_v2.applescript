@@ -14,6 +14,18 @@ on getenv(k, def)
   end try
 end getenv
 
+-- ====== JavaScript読み込み ======
+on loadJavaScript(fileName)
+  set scriptDir to (do shell script "dirname " & quoted form of ((POSIX path of (path to me)) as string))
+  set jsFile to scriptDir & "/" & fileName
+  try
+    set jsContent to (do shell script "cat " & quoted form of jsFile)
+    return {success:true, content:jsContent}
+  on error errMsg
+    return {success:false, message:"Failed to load " & fileName & ": " & errMsg}
+  end try
+end loadJavaScript
+
 -- ====== Safari接続確認 ======
 on checkSafariConnection()
   tell application "Safari"
@@ -460,6 +472,7 @@ on run
   -- 基本設定
   set saveDir to my getenv("SAVE_DIR", (POSIX path of (path to desktop folder)) & "Receipts/JRC")
   set DRY_RUN to my getenv("DRY_RUN", "false")
+  set PROCESS_ALL to my getenv("PROCESS_ALL", "false")
   
   -- 保存ディレクトリ作成
   do shell script "/bin/mkdir -p " & quoted form of saveDir
@@ -490,17 +503,66 @@ on run
   set summaryText to summary of rowInfo
   set fileName to my generateFileName(dateText, summaryText)
   
-  if DRY_RUN = "true" then
-    -- DRY RUN: データ取得のみ
-    display notification "DRY RUN: " & fileName with title "Preview"
-    return
-  end if
-  
-  -- 完全ワークフローを実行
-  set result to my processSingleReceipt(0, saveDir)
-  if success of result then
-    display notification (message of result) with title "Success"
+  if PROCESS_ALL = "true" then
+    -- 全件処理モード
+    if DRY_RUN = "true" then
+      display notification "DRY RUN: All rows processing mode" with title "Preview"
+      return
+    end if
+    
+    set result to my processAllReceipts(saveDir)
+    display notification "All processing completed" with title "Success"
   else
-    display alert "Processing Failed" message (message of result)
+    -- 単件処理モード（従来通り）
+    if DRY_RUN = "true" then
+      display notification "DRY RUN: " & fileName with title "Preview"
+      return
+    end if
+    
+    set result to my processSingleReceipt(0, saveDir)
+    if success of result then
+      display notification (message of result) with title "Success"
+    else
+      display alert "Processing Failed" message (message of result)
+    end if
   end if
 end run
+
+-- ====== 全件処理用関数 ======
+on processAllReceipts(saveDir)
+  set successCount to 0
+  set failureCount to 0
+  
+  -- 現在ページの行数を取得
+  try
+    set jsLoad to my loadJavaScript("pagination.js")
+    if not (success of jsLoad) then
+      return {success:false, message:"Could not load pagination.js"}
+    end if
+    
+    tell application "Safari"
+      tell front document
+        do JavaScript (content of jsLoad)
+        set totalRows to (do JavaScript "getTotalRowCount()")
+      end tell
+    end tell
+  on error errMsg
+    return {success:false, message:"Could not get row count: " & errMsg}
+  end try
+  
+  repeat with i from 0 to (totalRows - 1)
+    display notification "Processing row " & (i + 1) & "/" & totalRows with title "Receipt Collection"
+    
+    set result to my processSingleReceipt(i, saveDir)
+    
+    if success of result then
+      set successCount to successCount + 1
+    else
+      set failureCount to failureCount + 1
+    end if
+    
+    delay 2
+  end repeat
+  
+  return {successCount:successCount, failureCount:failureCount}
+end processAllReceipts
