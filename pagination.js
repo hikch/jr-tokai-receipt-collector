@@ -26,35 +26,46 @@ function checkPagination() {
 
 // 次ページボタンクリック
 function clickNextPage() {
+  console.log("=== clickNextPage() 開始 ===");
+  
   var nextButton = document.querySelector('a[name="b3"]');
+  console.log("次ボタン検索結果:", nextButton);
   
   if (nextButton) {
-    // 方法1: cfEXPY_doAction関数を直接呼び出し
+    console.log("次ボタンHTML:", nextButton.outerHTML);
+    console.log("onclick属性:", nextButton.getAttribute('onclick'));
+    
+    // cfEXPY_doAction関数の存在確認
+    console.log("cfEXPY_doAction関数の型:", typeof cfEXPY_doAction);
+    console.log("cfEXPY_doAction関数:", cfEXPY_doAction);
+    
+    // 方法1: cfEXPY_doAction関数を直接呼び出し（固定値RSWP360AIDP015を使用）
     try {
       if (typeof cfEXPY_doAction === 'function') {
+        console.log("cfEXPY_doAction('RSWP360AIDP015') 実行中...");
         cfEXPY_doAction('RSWP360AIDP015');
-        return "Next page cfEXPY_doAction executed";
+        console.log("cfEXPY_doAction('RSWP360AIDP015') 実行完了");
+        return "Next page executed: cfEXPY_doAction('RSWP360AIDP015')";
       }
     } catch (e) {
-      // 失敗時は次の方法を試行
+      console.error("cfEXPY_doAction実行エラー:", e);
+      return "cfEXPY_doAction failed: " + e.message;
     }
     
-    // 方法2: onclickイベントを直接実行
-    var onclickCode = nextButton.getAttribute('onclick');
-    if (onclickCode) {
-      try {
-        eval(onclickCode);
-        return "Next page onclick executed";
-      } catch (e) {
-        // eval失敗時は通常のclickを試行
-        nextButton.click();
-        return "Next page button clicked (fallback)";
-      }
-    } else {
-      nextButton.click();
-      return "Next page button clicked";
-    }
+    // cfEXPY_doAction関数が存在しない場合のフォールバック
+    console.error("cfEXPY_doAction関数が見つかりません");
+    return "cfEXPY_doAction function not found";
+    
   } else {
+    console.error("次ボタン(a[name='b3'])が見つかりません");
+    
+    // 代替セレクタでも検索してみる
+    var alternativeButtons = document.querySelectorAll('a[href="#"]');
+    console.log("代替検索結果 a[href='#']:", alternativeButtons.length + "個");
+    for (var i = 0; i < alternativeButtons.length; i++) {
+      console.log("代替ボタン" + i + ":", alternativeButtons[i].outerHTML);
+    }
+    
     return "Next page button not found";
   }
 }

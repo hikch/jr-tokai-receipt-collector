@@ -435,16 +435,65 @@ on saveReceiptAsPDF(saveDir)
   end try
 end saveReceiptAsPDF
 
--- ====== タブを閉じて一覧に戻る ======
+-- ====== 現在の画面タイプ確認 ======
+on checkCurrentPageType()
+  try
+    tell application "Safari"
+      tell front document
+        set pageURL to URL
+        set pageTitle to name
+        
+        -- 領収書画面の確認
+        set hasReceiptTitle to (do JavaScript "document.querySelector('h1') && document.querySelector('h1').textContent.includes('領収書')")
+        set hasReceiptTable to (do JavaScript "document.querySelector('tr.number') !== null")
+        
+        -- 履歴一覧画面の確認  
+        set hasHistoryForm to (do JavaScript "document.querySelector('form.history') !== null")
+        
+        -- 領収書表示画面の確認
+        set hasPrintButton to (do JavaScript "document.querySelector('input[value=\"印刷\"]') !== null")
+        
+        if hasReceiptTitle and hasReceiptTable then
+          return {success:true, pageType:"receipt", message:"領収書画面"}
+        else if hasHistoryForm then
+          return {success:true, pageType:"history", message:"履歴一覧画面"}
+        else if hasPrintButton then
+          return {success:true, pageType:"receipt_display", message:"領収書表示画面"}
+        else
+          return {success:true, pageType:"unknown", message:"不明な画面: " & pageTitle}
+        end if
+      end tell
+    end tell
+  on error errMsg
+    return {success:false, message:"Page check error: " & errMsg}
+  end try
+end checkCurrentPageType
+
+-- ====== 安全なタブクローズ（画面確認付き） ======
 on closeCurrentTab()
   try
-    tell application "Safari" to activate
-    delay 0.5
-    tell application "System Events"
-      keystroke "w" using command down
-    end tell
-    delay 1
-    return {success:true, message:"Tab closed, returned to history list"}
+    -- 現在の画面タイプを確認
+    set pageCheck to my checkCurrentPageType()
+    if not (success of pageCheck) then
+      return {success:false, message:"Cannot verify current page: " & (message of pageCheck)}
+    end if
+    
+    set currentPageType to pageType of pageCheck
+    set pageMessage to message of pageCheck
+    
+    -- 領収書画面の場合のみタブを閉じる
+    if currentPageType is "receipt" then
+      tell application "Safari" to activate
+      delay 0.5
+      tell application "System Events"
+        keystroke "w" using command down
+      end tell
+      delay 1
+      return {success:true, message:"Receipt tab closed: " & pageMessage}
+    else
+      return {success:false, message:"Wrong page type for closing: " & pageMessage}
+    end if
+    
   on error errMsg
     return {success:false, message:"Failed to close tab: " & errMsg}
   end try
@@ -574,41 +623,153 @@ on run
   end if
 end run
 
--- ====== 全件処理用関数 ======
+-- ====== 全件処理用関数（ページネーション対応） ======
 on processAllReceipts(saveDir)
   set successCount to 0
   set failureCount to 0
+  set totalProcessed to 0
+  set currentPage to 1
   
-  -- 現在ページの行数を取得
+  -- pagination.js読み込み
   try
     set jsLoad to my loadJavaScript("pagination.js")
     if not (success of jsLoad) then
       return {success:false, message:"Could not load pagination.js"}
     end if
-    
-    tell application "Safari"
-      tell front document
-        do JavaScript (content of jsLoad)
-        set totalRows to (do JavaScript "getTotalRowCount()")
-      end tell
-    end tell
   on error errMsg
-    return {success:false, message:"Could not get row count: " & errMsg}
+    return {success:false, message:"Could not load pagination.js: " & errMsg}
   end try
   
-  repeat with i from 0 to (totalRows - 1)
-    display notification "Processing row " & (i + 1) & "/" & totalRows with title "Receipt Collection"
+  -- 全ページを順次処理
+  repeat
+    display notification "Processing page " & currentPage with title "Receipt Collection"
     
-    set result to my processSingleReceipt(i, saveDir)
+    try
+      tell application "Safari"
+        tell front document
+          do JavaScript (content of jsLoad)
+          
+          -- 現在ページの行数取得
+          set totalRows to (do JavaScript "getTotalRowCount()")
+          
+          -- ページネーション状態確認
+          set paginationInfo to (do JavaScript "checkPagination()")
+          set hasNext to hasNext of paginationInfo
+        end tell
+      end tell
+    on error errMsg
+      return {success:false, message:"JavaScript execution failed: " & errMsg}
+    end try
     
-    if success of result then
-      set successCount to successCount + 1
+    -- 現在ページの全行を処理
+    repeat with i from 0 to (totalRows - 1)
+      set totalProcessed to totalProcessed + 1
+      display notification "Processing row " & (i + 1) & "/" & totalRows & " (Page " & currentPage & ", Total " & totalProcessed & ")" with title "Receipt Collection"
+      
+      set result to my processSingleReceipt(i, saveDir)
+      
+      if success of result then
+        set successCount to successCount + 1
+      else
+        set failureCount to failureCount + 1
+      end if
+      
+      delay 2
+    end repeat
+    
+    -- 次ページがある場合は次ページに移動
+    if hasNext then
+      display notification "Moving to next page... (hasNext=" & hasNext & ")" with title "Receipt Collection"
+      
+      try
+        tell application "Safari"
+          tell front document
+            -- 現在ページの最初の行データを取得（遷移確認用）
+            set currentFirstRowData to (do JavaScript "
+              (() => {
+                const articles = document.querySelectorAll('form.history.history-index.history-index-corp #main.history.history-list.history-list-recept .main-contents-wrap > article');
+                if (articles.length > 0) {
+                  const dateEl = articles[0].querySelector('table:nth-of-type(1) td:nth-of-type(2)');
+                  const summaryEl = articles[0].querySelector('table:nth-of-type(2) td:nth-of-type(2)');
+                  return {
+                    date: dateEl ? dateEl.textContent.trim() : '',
+                    summary: summaryEl ? summaryEl.textContent.trim() : ''
+                  };
+                }
+                return null;
+              })()
+            ")
+            
+            -- pagination.jsを再読み込み（関数確実に利用可能にする）
+            do JavaScript (content of jsLoad)
+            
+            -- 関数存在確認
+            set functionExists to (do JavaScript "typeof clickNextPage === 'function'")
+            display notification "clickNextPage function exists: " & functionExists with title "Debug"
+            
+            if functionExists then
+              set nextResult to (do JavaScript "clickNextPage()")
+              display notification "clickNextPage result: " & nextResult with title "Debug"
+            else
+              display notification "ERROR: clickNextPage function not found" with title "Debug"
+              return {success:false, message:"clickNextPage function not available", successCount:successCount, failureCount:failureCount}
+            end if
+            
+            -- ページ遷移待機
+            delay 5
+            
+            -- ページ内容の変化を確認（最初の行データで判定）
+            repeat with waitCount from 1 to 20
+              delay 1
+              try
+                set newFirstRowData to (do JavaScript "
+                  (() => {
+                    const articles = document.querySelectorAll('form.history.history-index.history-index-corp #main.history.history-list.history-list-recept .main-contents-wrap > article');
+                    if (articles.length > 0) {
+                      const dateEl = articles[0].querySelector('table:nth-of-type(1) td:nth-of-type(2)');
+                      const summaryEl = articles[0].querySelector('table:nth-of-type(2) td:nth-of-type(2)');
+                      return {
+                        date: dateEl ? dateEl.textContent.trim() : '',
+                        summary: summaryEl ? summaryEl.textContent.trim() : ''
+                      };
+                    }
+                    return null;
+                  })()
+                ")
+                
+                -- 行データが変化した場合はページ遷移完了
+                if currentFirstRowData is not equal to newFirstRowData then
+                  display notification "Page content changed after " & waitCount & " seconds" with title "Debug"
+                  exit repeat
+                end if
+              on error
+                -- データ取得失敗は無視
+              end try
+            end repeat
+            
+            -- 遷移後のページネーション状態を再確認
+            delay 2
+            do JavaScript (content of jsLoad)
+            set newPaginationInfo to (do JavaScript "checkPagination()")
+            set newHasNext to hasNext of newPaginationInfo
+            display notification "After move - hasNext: " & newHasNext with title "Debug"
+            
+          end tell
+        end tell
+        
+        set currentPage to currentPage + 1
+        delay 2
+        
+      on error errMsg
+        return {success:false, message:"Page navigation failed: " & errMsg, successCount:successCount, failureCount:failureCount}
+      end try
     else
-      set failureCount to failureCount + 1
+      -- 次ページがない場合は処理完了
+      display notification "No next page - processing complete" with title "Receipt Collection"
+      exit repeat
     end if
     
-    delay 2
   end repeat
   
-  return {successCount:successCount, failureCount:failureCount}
+  return {success:true, message:"All pages processed", successCount:successCount, failureCount:failureCount, totalProcessed:totalProcessed, totalPages:currentPage}
 end processAllReceipts
