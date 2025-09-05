@@ -34,6 +34,8 @@ PROCESS_ALL=false ./run.sh
 |--------|-------------|------|
 | `SAVE_DIR` | `~/Desktop/Receipts/JRC` | PDF保存先ディレクトリ |
 | `PROCESS_ALL` | `true` | `false`にすると最初の1件のみ処理 |
+| `RECEIPT_NAME_LINE1` | (空) | 領収書宛名1行目（20文字まで） |
+| `RECEIPT_NAME_LINE2` | (空) | 領収書宛名2行目（20文字まで） |
 
 **使用例:**
 ```bash
@@ -42,6 +44,12 @@ SAVE_DIR="~/Documents/Receipts" ./run.sh
 
 # 1件のみテスト実行
 PROCESS_ALL=false ./run.sh
+
+# 宛名を設定して実行
+RECEIPT_NAME_LINE1="株式会社サンプル" RECEIPT_NAME_LINE2="経理部" ./run.sh
+
+# 宛名1行のみ設定
+RECEIPT_NAME_LINE2="田中太郎" ./run.sh
 ```
 
 ## 📁 生成されるファイル

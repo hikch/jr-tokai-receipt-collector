@@ -3,10 +3,11 @@
   Safari + AppleScript for 一覧→領収書PDF自動保存
 *)
 
--- ====== 環境変数取得 ======
+-- ====== 環境変数取得（UTF-8対応） ======
 on getenv(k, def)
   try
-    set v to system attribute k
+    -- do shell scriptでUTF-8エンコーディングを明示的に指定
+    set v to do shell script "echo $" & k
     if v is missing value or v = "" then return def
     return v
   on error
@@ -191,6 +192,28 @@ on waitForNewTabFromPrint()
     return {success:false, message:"Timeout: New receipt tab not detected"}
   end tell
 end waitForNewTabFromPrint
+
+-- ====== 宛名入力機能 ======
+on fillReceiptName(line1, line2)
+  try
+    set jsLoad to my loadJavaScript("receipt_form.js")
+    if not (success of jsLoad) then
+      return {success:false, message:"Could not load receipt_form.js"}
+    end if
+    
+    tell application "Safari"
+      tell front document
+        do JavaScript (content of jsLoad)
+        
+        set fillJS to "fillReceiptName(" & quoted form of line1 & ", " & quoted form of line2 & ")"
+        set result to (do JavaScript fillJS)
+        return {success:true, message:result}
+      end tell
+    end tell
+  on error errMsg
+    return {success:false, message:"Receipt name fill failed: " & errMsg}
+  end try
+end fillReceiptName
 
 -- ====== 印刷ボタンクリック（領収書表示画面→領収書画面） ======
 on clickPrintButton()
@@ -500,7 +523,7 @@ on closeCurrentTab()
 end closeCurrentTab
 
 -- ====== 1件処理の完全ワークフロー ======
-on processSingleReceipt(rowIndex, saveDir)
+on processSingleReceipt(rowIndex, saveDir, nameLine1, nameLine2)
   -- 1. 行データ取得（領収書ボタンの存在確認のみ）
   set rowData to my getRowData(rowIndex)
   if not (success of rowData) then
@@ -526,7 +549,16 @@ on processSingleReceipt(rowIndex, saveDir)
     return {success:false, message:"Page transition failed: " & (message of transitionResult)}
   end if
   
-  -- 3. 印刷ボタンクリック（別タブで領収書画面へ）
+  -- 3. 宛名入力（環境変数で指定されている場合）
+  if nameLine1 ≠ "" or nameLine2 ≠ "" then
+    set nameResult to my fillReceiptName(nameLine1, nameLine2)
+    if not (success of nameResult) then
+      return {success:false, message:"Name fill failed: " & (message of nameResult)}
+    end if
+    delay 1
+  end if
+  
+  -- 4. 印刷ボタンクリック（別タブで領収書画面へ）
   set printClick to my clickPrintButton()
   if not (success of printClick) then
     return {success:false, message:"Print click failed: " & (message of printClick)}
@@ -567,6 +599,8 @@ on run
   -- 基本設定
   set saveDir to my getenv("SAVE_DIR", (POSIX path of (path to desktop folder)) & "Receipts/JRC")
   set PROCESS_ALL to my getenv("PROCESS_ALL", "false")
+  set RECEIPT_NAME_LINE1 to my getenv("RECEIPT_NAME_LINE1", "")
+  set RECEIPT_NAME_LINE2 to my getenv("RECEIPT_NAME_LINE2", "")
   
   -- 保存ディレクトリ作成
   do shell script "/bin/mkdir -p " & quoted form of saveDir
@@ -599,11 +633,11 @@ on run
   
   if PROCESS_ALL = "true" then
     -- 全件処理モード
-    set result to my processAllReceipts(saveDir)
+    set result to my processAllReceipts(saveDir, RECEIPT_NAME_LINE1, RECEIPT_NAME_LINE2)
     display notification "All processing completed" with title "Success"
   else
     -- 単件処理モード（従来通り）
-    set result to my processSingleReceipt(0, saveDir)
+    set result to my processSingleReceipt(0, saveDir, RECEIPT_NAME_LINE1, RECEIPT_NAME_LINE2)
     if success of result then
       display notification (message of result) with title "Success"
     else
@@ -613,7 +647,7 @@ on run
 end run
 
 -- ====== 全件処理用関数（ページネーション対応） ======
-on processAllReceipts(saveDir)
+on processAllReceipts(saveDir, nameLine1, nameLine2)
   set successCount to 0
   set failureCount to 0
   set totalProcessed to 0
@@ -655,7 +689,7 @@ on processAllReceipts(saveDir)
       set totalProcessed to totalProcessed + 1
       display notification "Processing row " & (i + 1) & "/" & totalRows & " (Page " & currentPage & ", Total " & totalProcessed & ")" with title "Receipt Collection"
       
-      set result to my processSingleReceipt(i, saveDir)
+      set result to my processSingleReceipt(i, saveDir, nameLine1, nameLine2)
       
       if success of result then
         set successCount to successCount + 1
