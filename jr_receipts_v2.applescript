@@ -598,7 +598,6 @@ end processSingleReceipt
 on run
   -- 基本設定
   set saveDir to my getenv("SAVE_DIR", (POSIX path of (path to desktop folder)) & "Receipts/JRC")
-  set PROCESS_ALL to my getenv("PROCESS_ALL", "false")
   set RECEIPT_NAME_LINE1 to my getenv("RECEIPT_NAME_LINE1", "")
   set RECEIPT_NAME_LINE2 to my getenv("RECEIPT_NAME_LINE2", "")
   
@@ -619,31 +618,9 @@ on run
     return
   end if
   
-  -- 最初の行データをテスト取得
-  set rowTest to my getRowData(0)
-  if not (success of rowTest) then
-    display alert "Row Data Test Failed" message (message of rowTest)
-    return
-  end if
-  
-  set rowInfo to data of rowTest
-  set dateText to |date| of rowInfo
-  set summaryText to summary of rowInfo
-  set fileName to my generateFileName(dateText, summaryText)
-  
-  if PROCESS_ALL = "true" then
-    -- 全件処理モード
-    set result to my processAllReceipts(saveDir, RECEIPT_NAME_LINE1, RECEIPT_NAME_LINE2)
-    display notification "All processing completed" with title "Success"
-  else
-    -- 単件処理モード（従来通り）
-    set result to my processSingleReceipt(0, saveDir, RECEIPT_NAME_LINE1, RECEIPT_NAME_LINE2)
-    if success of result then
-      display notification (message of result) with title "Success"
-    else
-      display alert "Processing Failed" message (message of result)
-    end if
-  end if
+  -- 全件処理実行
+  set result to my processAllReceipts(saveDir, RECEIPT_NAME_LINE1, RECEIPT_NAME_LINE2)
+  display notification "All processing completed" with title "Success"
 end run
 
 -- ====== 全件処理用関数（ページネーション対応） ======

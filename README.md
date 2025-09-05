@@ -16,15 +16,11 @@ JR東海のEX予約サイトから領収書PDFを自動収集するツール。
 
 ### 2. 実行方法
 
-**全件自動処理（推奨）:**
 ```bash
 ./run.sh
 ```
 
-**単件テスト実行:**
-```bash
-PROCESS_ALL=false ./run.sh
-```
+**注意**: 表示されている全ての履歴を処理します。テスト時はWeb側で期間や件数を絞り込んでください。
 
 ## ⚙️ 設定オプション
 
@@ -33,7 +29,6 @@ PROCESS_ALL=false ./run.sh
 | 変数名 | デフォルト値 | 説明 |
 |--------|-------------|------|
 | `SAVE_DIR` | `~/Desktop/Receipts/JRC` | PDF保存先ディレクトリ |
-| `PROCESS_ALL` | `true` | `false`にすると最初の1件のみ処理 |
 | `RECEIPT_NAME_LINE1` | (空) | 領収書宛名1行目（20文字まで） |
 | `RECEIPT_NAME_LINE2` | (空) | 領収書宛名2行目（20文字まで） |
 
@@ -41,9 +36,6 @@ PROCESS_ALL=false ./run.sh
 ```bash
 # 保存先を変更
 SAVE_DIR="~/Documents/Receipts" ./run.sh
-
-# 1件のみテスト実行
-PROCESS_ALL=false ./run.sh
 
 # 宛名を設定して実行
 RECEIPT_NAME_LINE1="株式会社サンプル" RECEIPT_NAME_LINE2="経理部" ./run.sh

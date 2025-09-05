@@ -85,8 +85,8 @@ cfEXPY_doAction('RSWP360AIDP015');
 # 次ボタン機能テスト
 osascript test/test_next_button.applescript
 
-# 1件のみテスト
-PROCESS_ALL=false ./run.sh
+# 少数件テスト - Web側で期間を短く設定してからスクリプト実行
+./run.sh
 ```
 
 ### デバッグ方法
@@ -122,7 +122,8 @@ PROCESS_ALL=false ./run.sh
 
 #### 環境変数
 - `SAVE_DIR` - PDF保存先
-- `PROCESS_ALL` - 全件処理フラグ
+- `RECEIPT_NAME_LINE1` - 領収書宛名1行目
+- `RECEIPT_NAME_LINE2` - 領収書宛名2行目
 
 ### ファイル名生成ロジック
 ```applescript
