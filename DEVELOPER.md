@@ -3,16 +3,21 @@
 ## 🏗️ プロジェクト構成
 
 ```
-ex-receipts-collect/
+jr-tokai-receipt-collector/
 ├── jr_receipts_v2.applescript    # メインスクリプト
 ├── pagination.js                 # ページネーション機能
 ├── receipt_data.js               # 領収書データ抽出
+├── receipt_form.js               # 宛名入力機能
 ├── run.sh                        # 実行スクリプト
 ├── README.md                     # 利用者向け説明書
 ├── TODO.md                       # タスク管理
 ├── DEVELOPER.md                  # 本ドキュメント
-└── test/
-    └── test_next_button.applescript  # 次ボタンテスト
+├── docs/
+│   └── adr/
+│       └── ADR.md                # アーキテクチャ決定記録
+├── test/
+│   └── test_next_button.applescript  # 次ボタンテスト
+└── tmp/                          # 一時ファイル（開発用）
 ```
 
 ## 🔧 技術スタック
@@ -78,6 +83,15 @@ cfEXPY_doAction('RSWP360AIDP015');
 'tr.date .c5 label'
 ```
 
+### 4. 宛名入力 (`receipt_form.js`)
+
+#### 環境変数による宛名設定
+```javascript
+// 宛名入力欄への自動入力
+'input[name="i1"]'  // 1行目
+'input[name="i2"]'  // 2行目
+```
+
 ## 🧪 テスト・デバッグ
 
 ### テスト実行
@@ -117,6 +131,7 @@ osascript test/test_next_button.applescript
 - `processSingleReceipt()` - 1件の領収書処理
 - `processAllReceipts()` - 全件処理（ページネーション対応）
 - `saveReceiptAsPDF()` - PDF保存（動的ファイル名生成）
+- `fillReceiptName()` - 宛名入力処理
 - `checkCurrentPageType()` - 画面タイプ判定
 - `closeCurrentTab()` - 安全なタブクローズ
 
@@ -192,8 +207,12 @@ docs: Update documentation
 test: Add test for specific functionality
 ```
 
+## 🗂️ アーキテクチャ決定記録
+
+プロジェクトの技術的決定事項は `docs/adr/ADR.md` に記録されています。
+
 ## 📚 参考資料
 
 - [AppleScript Language Guide](https://developer.apple.com/library/archive/documentation/AppleScript/Conceptual/AppleScriptLangGuide/)
 - [Safari JavaScript Automation](https://developer.apple.com/documentation/safariservices)
-- [JR東海EX予約 技術仕様](https://jr-central.co.jp) (非公式)
+- [JR東海EX予約システム](https://expy.jr-central.co.jp/)
