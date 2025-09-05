@@ -131,8 +131,10 @@ PROCESS_ALL=false ./run.sh
 ### ファイル名生成ロジック
 ```applescript
 -- 領収書画面から取得したデータで生成
+-- normalizedDate = 乗車日(YYYY-MM-DD形式)
+-- depositNumber = お預かり番号
 set fileName to normalizedDate & "_" & depositNumber & ".pdf"
--- 例: "2025-07-26_2026.pdf"
+-- 例: "2025-07-26_2026.pdf" (2025年7月26日乗車、お預かり番号2026)
 ```
 
 ## 🐛 既知の問題・制限事項
