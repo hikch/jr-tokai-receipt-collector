@@ -566,7 +566,6 @@ end processSingleReceipt
 on run
   -- 基本設定
   set saveDir to my getenv("SAVE_DIR", (POSIX path of (path to desktop folder)) & "Receipts/JRC")
-  set DRY_RUN to my getenv("DRY_RUN", "false")
   set PROCESS_ALL to my getenv("PROCESS_ALL", "false")
   
   -- 保存ディレクトリ作成
@@ -600,20 +599,10 @@ on run
   
   if PROCESS_ALL = "true" then
     -- 全件処理モード
-    if DRY_RUN = "true" then
-      display notification "DRY RUN: All rows processing mode" with title "Preview"
-      return
-    end if
-    
     set result to my processAllReceipts(saveDir)
     display notification "All processing completed" with title "Success"
   else
     -- 単件処理モード（従来通り）
-    if DRY_RUN = "true" then
-      display notification "DRY RUN: " & fileName with title "Preview"
-      return
-    end if
-    
     set result to my processSingleReceipt(0, saveDir)
     if success of result then
       display notification (message of result) with title "Success"

@@ -23,7 +23,7 @@ JR東海のEX予約サイトから領収書PDFを自動収集するツール。
 
 **単件テスト実行:**
 ```bash
-DRY_RUN=true ./run.sh
+PROCESS_ALL=false ./run.sh
 ```
 
 ## ⚙️ 設定オプション
@@ -33,16 +33,12 @@ DRY_RUN=true ./run.sh
 | 変数名 | デフォルト値 | 説明 |
 |--------|-------------|------|
 | `SAVE_DIR` | `~/Desktop/Receipts/JRC` | PDF保存先ディレクトリ |
-| `DRY_RUN` | `false` | `true`にするとプレビューのみ（実際の処理なし） |
 | `PROCESS_ALL` | `true` | `false`にすると最初の1件のみ処理 |
 
 **使用例:**
 ```bash
 # 保存先を変更
 SAVE_DIR="~/Documents/Receipts" ./run.sh
-
-# プレビューモード
-DRY_RUN=true ./run.sh
 
 # 1件のみテスト実行
 PROCESS_ALL=false ./run.sh

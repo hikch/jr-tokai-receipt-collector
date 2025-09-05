@@ -85,9 +85,6 @@ cfEXPY_doAction('RSWP360AIDP015');
 # 次ボタン機能テスト
 osascript test/test_next_button.applescript
 
-# 単件テスト（実処理なし）
-DRY_RUN=true ./run.sh
-
 # 1件のみテスト
 PROCESS_ALL=false ./run.sh
 ```
@@ -125,7 +122,6 @@ PROCESS_ALL=false ./run.sh
 
 #### 環境変数
 - `SAVE_DIR` - PDF保存先
-- `DRY_RUN` - プレビューモード
 - `PROCESS_ALL` - 全件処理フラグ
 
 ### ファイル名生成ロジック
