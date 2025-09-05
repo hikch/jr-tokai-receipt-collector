@@ -299,8 +299,28 @@ on clickBackButton()
   end try
 end clickBackButton
 
--- ====== PDF保存機能 ======
-on saveReceiptAsPDF(fileName, saveDir)
+-- ====== 領収書画面からデータ取得 ======
+on getReceiptData()
+  try
+    set jsLoad to my loadJavaScript("receipt_data.js")
+    if not (success of jsLoad) then
+      return {success:false, message:"Could not load receipt_data.js"}
+    end if
+    
+    tell application "Safari"
+      tell front document
+        do JavaScript (content of jsLoad)
+        set result to (do JavaScript "getReceiptData()")
+        return {success:true, data:result}
+      end tell
+    end tell
+  on error errMsg
+    return {success:false, message:"Receipt data error: " & errMsg}
+  end try
+end getReceiptData
+
+-- ====== PDF保存機能（動的ファイル名生成） ======
+on saveReceiptAsPDF(saveDir)
   try
     -- 保存ディレクトリ作成
     do shell script "/bin/mkdir -p " & quoted form of saveDir
@@ -312,6 +332,20 @@ on saveReceiptAsPDF(fileName, saveDir)
       keystroke "." using command down
     end tell
     delay 1
+    
+    -- 印刷ダイアログキャンセル後に領収書画面からデータを取得してファイル名生成
+    set receiptData to my getReceiptData()
+    if not (success of receiptData) then
+      return {success:false, message:"Failed to get receipt data: " & (message of receiptData)}
+    end if
+    
+    set dataObj to data of receiptData
+    set depositNumber to depositNumber of dataObj
+    set rideDate to rideDate of dataObj
+    
+    -- ファイル名生成
+    set normalizedDate to my normalizeDate(rideDate)
+    set fileName to normalizedDate & "_" & depositNumber & ".pdf"
     
     -- ファイルメニューからPDF書き出し
     tell application "System Events"
@@ -394,7 +428,7 @@ on saveReceiptAsPDF(fileName, saveDir)
       end tell
     end tell
     
-    return {success:true, message:"PDF saved as " & fileName}
+    return {success:true, message:"PDF saved as " & fileName, fileName:fileName}
     
   on error errMsg
     return {success:false, message:"PDF save failed: " & errMsg}
@@ -418,23 +452,18 @@ end closeCurrentTab
 
 -- ====== 1件処理の完全ワークフロー ======
 on processSingleReceipt(rowIndex, saveDir)
-  -- 1. 行データ取得
+  -- 1. 行データ取得（領収書ボタンの存在確認のみ）
   set rowData to my getRowData(rowIndex)
   if not (success of rowData) then
     return {success:false, message:"Row " & rowIndex & ": " & (message of rowData)}
   end if
   
   set rowInfo to data of rowData
-  set dateText to |date| of rowInfo
-  set summaryText to summary of rowInfo
   set hasButton to hasReceiptButton of rowInfo
   
   if not hasButton then
     return {success:false, message:"Row " & rowIndex & ": No receipt button"}
   end if
-  
-  -- ファイル名生成
-  set fileName to my generateFileName(dateText, summaryText)
   
   -- 2. 領収書表示ボタンクリック（同じタブで遷移）
   set receiptClick to my clickReceiptButton(rowIndex)
@@ -457,11 +486,13 @@ on processSingleReceipt(rowIndex, saveDir)
   -- 新タブで領収書画面が開くのを待機
   delay 3
   
-  -- 4. PDF保存処理
-  set pdfSave to my saveReceiptAsPDF(fileName, saveDir)
+  -- 4. PDF保存処理（領収書画面でファイル名を動的生成）
+  set pdfSave to my saveReceiptAsPDF(saveDir)
   if not (success of pdfSave) then
     return {success:false, message:"PDF save failed: " & (message of pdfSave)}
   end if
+  
+  set fileName to fileName of pdfSave
   
   -- 5. 領収書タブを閉じる
   tell application "Safari" to activate
