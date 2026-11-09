@@ -1,0 +1,14 @@
+{
+  "name": "ex-receipts-collect",
+  "version": "2.0.0",
+  "description": "JR東海EX予約の領収書PDF自動収集 (Playwright版)",
+  "main": "collect.js",
+  "scripts": {
+    "start": "node collect.js",
+    "install:browsers": "npx playwright install chromium"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "playwright": "^1.48.0"
+  }
+}
