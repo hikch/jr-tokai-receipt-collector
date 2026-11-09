@@ -3,216 +3,104 @@
 ## 🏗️ プロジェクト構成
 
 ```
-jr-tokai-receipt-collector/
-├── jr_receipts_v2.applescript    # メインスクリプト
-├── pagination.js                 # ページネーション機能
-├── receipt_data.js               # 領収書データ抽出
-├── receipt_form.js               # 宛名入力機能
-├── run.sh                        # 実行スクリプト
-├── README.md                     # 利用者向け説明書
-├── TODO.md                       # タスク管理
-├── DEVELOPER.md                  # 本ドキュメント
+ex-receipts-collect/
+├── collect.js        # メイン Playwright スクリプト
+├── package.json      # Node.js 依存関係
+├── run.sh            # collect.js の薄いラッパー
+├── .env.example      # 設定テンプレート
+├── .env              # 実際の設定（gitignore済み）
+├── .session.json     # Playwright セッション保存（gitignore済み）
+├── AGENTS.md         # AI エージェント向け仕様
+├── README.md         # 利用者向け説明書
+├── DEVELOPER.md      # 本ドキュメント
 ├── docs/
 │   └── adr/
-│       └── ADR.md                # アーキテクチャ決定記録
-├── test/
-│   └── test_next_button.applescript  # 次ボタンテスト
-└── tmp/                          # 一時ファイル（開発用）
+│       └── ADR.md    # アーキテクチャ決定記録
+└── tmp/              # 一時ファイル（開発用）
 ```
 
 ## 🔧 技術スタック
 
-- **AppleScript** - Safari自動化とシステム操作
-- **JavaScript (ES5)** - Webページ操作とデータ抽出
-- **Bash** - 環境変数設定と実行制御
+- **Playwright** - Chromium ブラウザ自動化・PDF保存
+- **Node.js** - 実行環境
+- **dotenv** - 環境変数管理
+- **Bash** - run.sh ラッパー
 
-## 📋 動作フロー詳細
+## 📋 動作フロー
 
-### 1. メイン処理 (`jr_receipts_v2.applescript`)
-
-#### 単件処理フロー
 ```
-1. 一覧ページで行データ取得・検証
-2. 「領収書表示」ボタンクリック
-3. ページ遷移待機
-4. 「印刷」ボタンクリック → 新タブで領収書画面
-5. 領収書画面でデータ抽出してファイル名生成
-6. PDF保存（印刷ダイアログキャンセル → ファイルメニュー）
-7. 領収書タブクローズ
-8. 「戻る」ボタンで一覧に戻る
-```
-
-#### 全件処理フロー（ページネーション対応）
-```
-repeat (全ページ):
-  repeat (現在ページの全行):
-    単件処理フロー実行
-  end repeat
-  
-  if hasNext:
-    次ページへ移動
-    ページ内容変化を監視
-    新ページ読み込み完了を待機
-  else:
-    処理完了
-  end if
-end repeat
+1. .env 読み込み・認証情報確認
+2. .session.json があれば読み込んでセッション復元
+3. LOGIN_URL へアクセス
+4. 未ログインなら ID/PW 入力 → ログインボタンクリック
+5. 追加認証（SMS等）が必要なら Enter 待機
+6. ログイン成功後 .session.json を保存
+7. 利用履歴一覧ページを検出
+   ↓ ページループ
+8.   article 一覧を取得（領収書ボタンを持つ行のみ）
+     ↓ 行ループ
+9.     「領収書表示」ボタンクリック
+10.    宛名を入力（環境変数が設定されている場合）
+11.    「印刷」ボタン: JS直接実行で新窓を開く
+12.    新窓で page.pdf() により PDF 保存
+13.    新窓を閉じる → 1.5秒待機 → 「戻る」ボタン
+     ↓ 行ループ終了
+14.  次ページリンクがあれば遷移（先頭行変化で確認）
+   ↓ ページループ終了
+15. browser.close() → process.exit(0)
 ```
 
-### 2. ページネーション (`pagination.js`)
+## 🔑 重要な実装メモ
 
-#### 主要関数
-- `getTotalRowCount()` - 現在ページの行数取得
-- `checkPagination()` - 次/前ボタンの存在確認
-- `clickNextPage()` - 次ページボタンクリック
+### opacity:0 ボタン
+サイトのボタンはすべて `opacity: 0` の `input[type="submit"]` が実体で、
+見た目は `div.des` で表示している。Playwright の `click({ force: true })` が必要。
 
-#### 次ページ遷移の仕組み
-```javascript
-// 固定値でcfEXPY_doAction関数を呼び出し
-cfEXPY_doAction('RSWP360AIDP015');
+### ファイル名の日付は乗車日
+`tr.date` 行には購入日（`.c2`）と乗車日（`.c5`）の両方が存在する。
+ファイル名に使用するのは **乗車日（`.c5`）**。
+
+```html
+<tr class="date">
+  <td class="c2"><label>購入日</label></td>   <!-- 使わない -->
+  <td class="c5"><label>乗車日</label></td>   <!-- ファイル名に使用 -->
+</tr>
 ```
 
-### 3. 領収書データ抽出 (`receipt_data.js`)
+### 印刷ボタンの特殊処理
+印刷ボタンの onclick は `cfEXPY_checkLoadEnd()` のチェックを含むため、
+クリックの代わりに `page.evaluate()` で JS を直接呼び出す:
 
-#### データ取得セレクタ
-```javascript
-// お預かり番号
-'tr.number .c2 label'
-
-// 乗車日  
-'tr.date .c5 label'
+```js
+page.evaluate(() => {
+  window.open('/RSV_P/p38/jsp/new_window.html', 'New_Screen');
+  cfEXPY_doNoCheckAction('RSWP360AIDP036', 'New_Screen');
+})
 ```
 
-### 4. 宛名入力 (`receipt_form.js`)
+### ページネーション
+次ページも同様に JS を直接呼び出す:
 
-#### 環境変数による宛名設定
-```javascript
-// 宛名入力欄への自動入力
-'input[name="i1"]'  // 1行目
-'input[name="i2"]'  // 2行目
+```js
+page.evaluate(() => cfEXPY_doAction('RSWP360AIDP015'))
 ```
 
-## 🧪 テスト・デバッグ
+遷移完了の確認は「先頭 article の innerText が変化したか」で判定。
 
-### テスト実行
-```bash
-# 次ボタン機能テスト
-osascript test/test_next_button.applescript
+### networkidle を避ける理由
+サイトがバックグラウンドで継続的にネットワーク通信するため
+`waitForLoadState('networkidle')` がタイムアウトする。
+代わりに `'load'` または `waitForSelector` を使用する。
 
-# 少数件テスト - Web側で期間を短く設定してからスクリプト実行
-./run.sh
-```
+## 🧪 デバッグ
 
-### デバッグ方法
+ページの状態確認が必要な場合、一時的に以下を追加:
 
-1. **Safari開発者コンソール**
-   ```
-   ⌘+⌥+C でコンソール開く
-   pagination.jsの詳細ログを確認
-   ```
-
-2. **AppleScript通知**
-   ```
-   各処理段階でmacOS通知が表示される
-   エラー詳細はダイアログで表示
-   ```
-
-3. **ページタイプ確認**
-   ```applescript
-   -- 現在表示中の画面タイプを判定
-   checkCurrentPageType()
-   ```
-
-## 📁 ファイル詳細
-
-### `jr_receipts_v2.applescript`
-
-#### 主要関数
-- `processSingleReceipt()` - 1件の領収書処理
-- `processAllReceipts()` - 全件処理（ページネーション対応）
-- `saveReceiptAsPDF()` - PDF保存（動的ファイル名生成）
-- `fillReceiptName()` - 宛名入力処理
-- `checkCurrentPageType()` - 画面タイプ判定
-- `closeCurrentTab()` - 安全なタブクローズ
-
-#### 環境変数
-- `SAVE_DIR` - PDF保存先
-- `RECEIPT_NAME_LINE1` - 領収書宛名1行目
-- `RECEIPT_NAME_LINE2` - 領収書宛名2行目
-
-### ファイル名生成ロジック
-```applescript
--- 領収書画面から取得したデータで生成
--- normalizedDate = 乗車日(YYYY-MM-DD形式)
--- depositNumber = お預かり番号
-set fileName to normalizedDate & "_" & depositNumber & ".pdf"
--- 例: "2025-07-26_2026.pdf" (2025年7月26日乗車、お預かり番号2026)
-```
-
-## 🐛 既知の問題・制限事項
-
-### 1. ページ遷移の検出
-- URLが変わらないため、ページ内容の変化で判定
-- 最初の行データを比較して遷移完了を検知
-
-### 2. タイミング調整
-```applescript
--- 印刷ダイアログキャンセル後の処理順序が重要
-delay 1  -- キャンセル処理完了待機
--- データ取得・ファイル名生成
--- PDF書き出し実行
-```
-
-### 3. Safari依存
-- Apple Events からのJavaScript実行が必須
-- Safari固有の動作に依存（他ブラウザ不可）
-
-## 🔄 継続的改善
-
-### パフォーマンス
-- `delay` の最適化
-- エラーハンドリングの強化
-- 並列処理の検討
-
-### 機能追加案
-- ~~日付範囲指定フィルタ~~ → EX予約サイトの期間選択機能で代替
-- 重複ファイルチェック
-- 処理進捗の詳細表示
-- 設定ファイルサポート
-
-### 期間選択について
-現在は**EX予約サイトの標準機能**を使用：
-- サイト上で利用履歴の表示期間を選択
-- スクリプトは表示されている期間の全データを処理
-- この方式により、サイトのUI変更に対する耐性を確保
-
-### コード品質
-- AppleScript関数の分割
-- JavaScriptのモジュール化
-- エラーメッセージの統一
-
-## 🤝 コントリビューション
-
-1. `feature/*` ブランチで開発
-2. テスト実行確認
-3. コミットメッセージは従来の形式に準拠
-4. プルリクエスト作成
-
-### コミットメッセージ例
-```
-feat: Add new feature description
-fix: Fix specific bug description  
-refactor: Refactor component description
-docs: Update documentation
-test: Add test for specific functionality
+```js
+await page.screenshot({ path: '/tmp/debug.png' });
+require('fs').writeFileSync('/tmp/debug.html', await page.content());
 ```
 
 ## 🗂️ アーキテクチャ決定記録
 
-プロジェクトの技術的決定事項は `docs/adr/ADR.md` に記録されています。
-
-## 📚 参考資料
-
-- [AppleScript Language Guide](https://developer.apple.com/library/archive/documentation/AppleScript/Conceptual/AppleScriptLangGuide/)
-- [Safari JavaScript Automation](https://developer.apple.com/documentation/safariservices)
-- [JR東海EX予約システム](https://expy.jr-central.co.jp/)
+`docs/adr/ADR.md` を参照。
